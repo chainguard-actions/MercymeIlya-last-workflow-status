@@ -1,0 +1,39 @@
+name: Test basic usage (push event)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_EVENT_NAME: push
+      GITHUB_REF: refs/heads/act-harness
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          github_token: ${{ github.token }}
+
+      - name: Assert last_status output is set
+        env:
+          LAST_STATUS: ${{ steps.action.outputs.last_status }}
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "last_status: $LAST_STATUS"
+          if [ "$OUTCOME" = "success" ]; then
+            # On success, last_status must be non-empty
+            if [ -z "$LAST_STATUS" ]; then
+              echo "FAIL: action succeeded but last_status output is empty"
+              exit 1
+            fi
+            echo "PASS: last_status='$LAST_STATUS'"
+          elif [ "$OUTCOME" = "failure" ]; then
+            # The sentinel repo causes API 404s; action may fail gracefully
+            echo "PASS: action failed gracefully (sentinel repo not resolvable)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

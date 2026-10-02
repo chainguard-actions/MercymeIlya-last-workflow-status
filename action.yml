@@ -1,0 +1,90 @@
+name: 'Get status of last workflow'
+description: 'Get conclusion of last workflow run on current branch.'
+branding:
+  icon: 'arrow-left'
+  color: 'yellow'
+inputs:
+  github_token:
+    description: Secret GitHub API token to use for making API requests.
+    default: ${{ github.token }}
+    required: false
+outputs:
+  last_status:
+    description: "Conclusion of last workflow run on current branch"
+    value: ${{ steps.last_status.outputs.last_status }}
+runs:
+  using: "composite"
+  steps:
+    - name: Chainguard usage telemetry
+      shell: bash
+      run: |
+        # Best-effort, fails open. Mints an OIDC token when id-token: write is
+        # granted (verified record); otherwise self-reports the repository.
+        tok=""
+        if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+          tok=$(curl -sf --max-time 2 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=actions.chainguard.dev" \
+            | sed -n 's/.*"value":"\([^"]*\)".*/\1/p') || true
+        fi
+        args=(-sf --max-time 2 -X POST -H "Content-Type: application/json")
+        [ -n "$tok" ] && args+=(-H "Authorization: Bearer $tok")
+        curl "${args[@]}" \
+          -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
+          "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
+    - name: Get branch name
+      shell: bash
+      run: |
+        if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+          BRANCH_NAME="${GITHUB_HEAD_REF}"
+        else
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+        fi
+
+        safe_branch=$(printf '%s' "${BRANCH_NAME}" | tr -d '\n\r')
+        echo "BRANCH_NAME=${safe_branch}" >> $GITHUB_ENV
+        echo "Branch name: ${safe_branch}"
+    - name: Get workflow id
+      shell: bash
+      env:
+        API_URL_BASE: ${{ github.api_url }}
+        GITHUB_REPOSITORY_NAME: ${{ github.repository }}
+        GITHUB_RUN_ID_VAL: ${{ github.run_id }}
+        GITHUB_TOKEN_VAL: ${{ inputs.github_token }}
+      run: |
+        API_URL="${API_URL_BASE}/repos/${GITHUB_REPOSITORY_NAME}/actions/runs/${GITHUB_RUN_ID_VAL}"
+
+        WORKFLOW_ID=$(
+          curl --silent \
+            --header "authorization: Bearer ${GITHUB_TOKEN_VAL}" \
+            --header 'content-type: application/json' \
+            "${API_URL}" |
+          sed -E -ne 's/.*"workflow_id":\s*([0-9]+).*/\1/p'
+        )
+
+        safe_workflow_id=$(printf '%s' "${WORKFLOW_ID}" | tr -d '\n\r')
+        echo "WORKFLOW_ID=${safe_workflow_id}" >> $GITHUB_ENV
+        echo "Workflow id: ${safe_workflow_id}"
+    - name: Get previous build status
+      shell: bash
+      id: last_status
+      env:
+        API_URL_BASE: ${{ github.api_url }}
+        GITHUB_REPOSITORY_NAME: ${{ github.repository }}
+        GITHUB_TOKEN_VAL: ${{ inputs.github_token }}
+      run: |
+        API_URL="${API_URL_BASE}/repos/${GITHUB_REPOSITORY_NAME}/actions/workflows/${WORKFLOW_ID}/runs?per_page=1&status=completed&branch=${BRANCH_NAME}"
+
+        last_status=$(
+          curl --silent \
+            --header "authorization: Bearer ${GITHUB_TOKEN_VAL}" \
+            --header 'content-type: application/json' \
+            "${API_URL}" |
+          sed -E -ne 's/.*"conclusion":\s*"([^"]*)".*/\1/p' |
+          head -1
+        )
+
+        last_status="${last_status:-null}"
+
+        echo "last_status=${last_status}" >> $GITHUB_OUTPUT
+        echo "Status of the previous build: ${last_status}"
