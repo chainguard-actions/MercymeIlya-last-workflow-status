@@ -6,9 +6,9 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 ## Versions
 
-| Version | Tag | Upstream commit |
-|---------|-----|-----------------|
-| v0.3.5 | [`v0.3.5`](https://github.com/chainguard-actions/MercymeIlya-last-workflow-status/tree/v0.3.5) | [`f86bce1`](https://github.com/MercymeIlya/last-workflow-status/commit/f86bce177498d6fdd3bda4113d7d93266cfc3fca) |
+| Version | Tag | Upstream commit | Hardening report |
+|---------|-----|-----------------|------------------|
+| v0.3.5 | [`v0.3.5`](https://github.com/chainguard-actions/MercymeIlya-last-workflow-status/tree/v0.3.5) | [`f86bce1`](https://github.com/MercymeIlya/last-workflow-status/commit/f86bce177498d6fdd3bda4113d7d93266cfc3fca) | [`HARDENING.md`](https://github.com/chainguard-actions/MercymeIlya-last-workflow-status/blob/v0.3.5/HARDENING.md) |
 
 ## Privacy
 
